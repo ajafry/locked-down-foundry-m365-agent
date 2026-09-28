@@ -4,12 +4,11 @@ Stage 13 — Foundry account (orchestrator)
 The Foundry (AI Services) account is the centrepiece of the whole platform, so it
 gets its own stage carrying EVERYTHING that stands the account up and protects it:
 
-  foundry/ai-services-account.bicep            → the account + model deployment + SMI
-                                                 + VNet injection + diagnostics
+  foundry/ai-services-account.bicep            → the CMK-protected account + model deployment
+                                                 + SMI/UAMI + VNet injection + diagnostics
   network/ai-account-private-endpoint.bicep    → the account private endpoint + DNS
-  rbac/keyvault-account-role-assignment.bicep  → account SMI → Key Vault Crypto User (CMK)
+  rbac/keyvault-account-role-assignment.bicep  → CMK UAMI → Key Vault Crypto User
   rbac/app-insights-account-role-assignment.bicep → account SMI → Log Analytics Reader
-  encryption/ai-account-encryption.bicep       → re-PUT the account with CMK encryption
 
 Runs AFTER stage 10 (needs Key Vault + the DNS zones + the data substrate). The
 project (its data-plane RBAC + capability host) lives in stage 15.
@@ -44,14 +43,26 @@ param keyVaultUri string
 param keyName string
 param keyUriWithVersion string
 
-// Foundry account egress posture — shared by BOTH the identity (create) and encryption
-// (CMK re-PUT) declarations of the account. A CognitiveServices account update is a full PUT,
-// so both declarations must agree on these network properties or they silently drift (the
-// encryption module deploys last and wins). Define once here and pass to both.
+// Foundry account egress posture.
 var foundryRestrictOutboundNetworkAccess = false
 var foundryAllowedFqdnList = []
 // Private-endpoint-only: public network access is always disabled.
 var foundryPublicNetworkAccess = 'Disabled'
+
+// A dedicated UAMI avoids the system-assigned identity propagation race during CMK setup:
+// its principal exists and receives Key Vault access before the Foundry account PUT.
+resource cmkIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: '${accountName}-cmk-id'
+  location: location
+}
+
+module keyVaultAccountRoleAssignment './rbac/keyvault-account-role-assignment.bicep' = {
+  name: 'keyvault-account-rbac-${uniqueSuffix}-deployment'
+  params: {
+    keyVaultName: keyVaultName
+    cmkPrincipalId: cmkIdentity.properties.principalId
+  }
+}
 
 module aiAccount './foundry/ai-services-account.bicep' = {
   name: 'ai-${accountName}-${uniqueSuffix}-deployment'
@@ -70,7 +81,15 @@ module aiAccount './foundry/ai-services-account.bicep' = {
     restrictOutboundNetworkAccess: foundryRestrictOutboundNetworkAccess
     allowedFqdnList: foundryAllowedFqdnList
     publicNetworkAccess: foundryPublicNetworkAccess
+    cmkIdentityResourceId: cmkIdentity.id
+    cmkIdentityClientId: cmkIdentity.properties.clientId
+    keyVaultUri: keyVaultUri
+    keyName: keyName
+    keyVersion: last(split(keyUriWithVersion, '/'))
   }
+  dependsOn: [
+    keyVaultAccountRoleAssignment
+  ]
 }
 
 
@@ -80,34 +99,6 @@ module appInsightsAccountRoleAssignment './rbac/app-insights-account-role-assign
     appInsightsName: appInsightsName
     accountPrincipalId: aiAccount.outputs.accountPrincipalId
   }
-}
-
-// Grant the account SMI Key Vault Crypto User BEFORE the CMK re-PUT (KV data-plane role
-// must be effective first).
-module keyVaultAccountRoleAssignment './rbac/keyvault-account-role-assignment.bicep' = {
-  name: 'keyvault-account-rbac-${uniqueSuffix}-deployment'
-  params: {
-    keyVaultName: keyVaultName
-    aiServicesPrincipalId: aiAccount.outputs.accountPrincipalId
-  }
-}
-
-module aiAccountEncryption './encryption/ai-account-encryption.bicep' = {
-  name: 'ai-encryption-${uniqueSuffix}-deployment'
-  params: {
-    accountName: aiAccount.outputs.accountName
-    location: location
-    keyVaultUri: keyVaultUri
-    keyName: keyName
-    keyVersion: last(split(keyUriWithVersion, '/'))
-    agentSubnetId: agentSubnetId
-    restrictOutboundNetworkAccess: foundryRestrictOutboundNetworkAccess
-    allowedFqdnList: foundryAllowedFqdnList
-    publicNetworkAccess: foundryPublicNetworkAccess
-  }
-  dependsOn: [
-    keyVaultAccountRoleAssignment
-  ]
 }
 
 module aiAccountPrivateEndpoint './network/ai-account-private-endpoint.bicep' = {
@@ -120,11 +111,7 @@ module aiAccountPrivateEndpoint './network/ai-account-private-endpoint.bicep' = 
     openAiDnsZoneId: openAiDnsZoneId
     cognitiveServicesDnsZoneId: cognitiveServicesDnsZoneId
   }
-  dependsOn: [
-    aiAccountEncryption //slow things down. Been getting some private-endpoint errors as Foundry not ready.
-  ]
 }
-
 
 output aiAccountName string = aiAccount.outputs.accountName
 output accountPrincipalId string = aiAccount.outputs.accountPrincipalId

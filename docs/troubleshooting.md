@@ -180,3 +180,20 @@ missing firewall or RBAC rule.
 Portal-originated discovery may not reach private-only APIM. A portal showing no models does not
 prove that the agent runtime is broken. Test from the private runner and inspect firewall and
 APIM logs before changing network policy.
+
+# App Service zip deployment returns 403
+
+`azd up` can finish provisioning and then fail during the separate App Service code-deployment
+phase with `403 Ip Forbidden` from an `*.scm.azurewebsites.net` URL. The predeploy hook temporarily
+opens each SCM site and uses the `x-ms-forbidden-ip` response header to learn the actual source
+addresses. This matters when App Service sees a rotating proxy pool that differs from public
+IP-discovery services. The hook adds individual temporary host rules, requires repeated successful
+Kudu probes, and fails before zip deployment if access never becomes effective.
+
+After updating the hook, rerun:
+
+```powershell
+azd deploy
+```
+
+The postdeploy hook removes the temporary SCM allow rules after both services are deployed.

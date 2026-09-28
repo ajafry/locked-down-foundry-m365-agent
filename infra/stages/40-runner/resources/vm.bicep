@@ -10,6 +10,9 @@
   always-on Linux worker VM (vm-linux.bicep), which is where the Foundry / Key
   Vault / Contributor role assignments are made. Set deployWindowsVm=false in
   CI-only environments to skip the Windows licence and compute cost entirely.
+
+  Boot diagnostics use Azure-managed storage, so this optional diagnostic VM does
+  not need its own storage account or a public storage endpoint.
 */
 
 @description('Username for the Virtual Machine.')
@@ -50,7 +53,7 @@ param adminPassword string
 param OSVersion string = '2022-datacenter-azure-edition'
 
 @description('Size of the virtual machine.')
-param vmSize string = 'Standard_D2s_v6'
+param vmSize string = 'Standard_D2s_v7'
 
 @description('Location for all resources.')
 param location string = resourceGroup().location
@@ -67,7 +70,6 @@ param securityType string = 'Standard'
 param virtualNetworkName string
 param subnetName string
 
-var storageAccountName = 'bootdiags${uniqueString(resourceGroup().id)}'
 var nicName = 'myVMNic'
 var securityProfileJson = {
   uefiSettings: {
@@ -75,15 +77,6 @@ var securityProfileJson = {
     vTpmEnabled: true
   }
   securityType: securityType
-}
-
-resource storageAccount 'Microsoft.Storage/storageAccounts@2022-05-01' = {
-  name: storageAccountName
-  location: location
-  sku: {
-    name: 'Standard_LRS'
-  }
-  kind: 'Storage'
 }
 
 resource nic 'Microsoft.Network/networkInterfaces@2022-05-01' = {
@@ -150,7 +143,6 @@ resource vm 'Microsoft.Compute/virtualMachines@2022-03-01' = {
     diagnosticsProfile: {
       bootDiagnostics: {
         enabled: true
-        storageUri: storageAccount.properties.primaryEndpoints.blob
       }
     }
     securityProfile: ((securityType == 'TrustedLaunch') ? securityProfileJson : null)

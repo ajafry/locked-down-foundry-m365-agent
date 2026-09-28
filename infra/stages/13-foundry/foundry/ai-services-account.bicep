@@ -4,13 +4,14 @@ Foundry (Azure AI Services) account — the core resource of the whole platform.
 Despite living under foundry/, this creates the ENTIRE account, not just an identity:
   - the Microsoft.CognitiveServices/accounts resource ('AIServices' kind) that IS Foundry
   - a model deployment on it (the default chat model)
-  - a system-assigned managed identity (the account's data-plane identity)
+  - a system-assigned identity for the account data plane
+  - a user-assigned identity dedicated to customer-managed-key access
   - VNet injection into the agent subnet (so the account runs inside the private network)
   - diagnostic settings -> Log Analytics / App Insights
 
-The CMK re-PUT of this account lives in encryption/ai-account-encryption.bicep; both must
-agree on the egress posture, so restrictOutboundNetworkAccess / allowedFqdnList are threaded
-in from the stage orchestrator rather than defaulted here.
+The CMK identity receives Key Vault Crypto User before this module runs, avoiding the
+eventual-consistency race that occurs when a new system-assigned identity is granted access
+and immediately used in a second account PUT.
 */
 
 param accountName string
@@ -23,14 +24,19 @@ param modelCapacity int
 param agentSubnetId string
 param networkInjection string = 'true'
 param logAnalyticsWorkspaceId string
+param cmkIdentityResourceId string
+param cmkIdentityClientId string
+param keyVaultUri string
+param keyName string
+param keyVersion string
 
-@description('Restrict outbound network access to the allowedFqdnList. Shared with the CMK encryption module so both declarations of the account agree (a CognitiveServices update is a full PUT).')
+@description('Restrict outbound network access to the allowedFqdnList.')
 param restrictOutboundNetworkAccess bool
 
-@description('Allowed outbound FQDNs (only enforced when restrictOutboundNetworkAccess is true). Shared with the CMK encryption module.')
+@description('Allowed outbound FQDNs (only enforced when restrictOutboundNetworkAccess is true).')
 param allowedFqdnList array
 
-@description('Public network access on the Foundry account data plane. Disabled = private-endpoint-only (firewall tier); Enabled = reachable publicly (firewall opt-out on-ramp, PE still present). Shared with the CMK encryption module so both full-PUT declarations agree.')
+@description('Public network access on the Foundry account data plane. Disabled = private-endpoint-only.')
 param publicNetworkAccess string = 'Disabled'
 
 @secure()
@@ -46,9 +52,21 @@ resource account 'Microsoft.CognitiveServices/accounts@2025-04-01-preview' = {
   }
   kind: 'AIServices'
   identity: {
-    type: 'SystemAssigned'
+    type: 'SystemAssigned, UserAssigned'
+    userAssignedIdentities: {
+      '${cmkIdentityResourceId}': {}
+    }
   }
   properties: {
+    encryption: {
+      keySource: 'Microsoft.KeyVault'
+      keyVaultProperties: {
+        keyVaultUri: keyVaultUri
+        keyName: keyName
+        keyVersion: keyVersion
+        identityClientId: cmkIdentityClientId
+      }
+    }
     allowProjectManagement: true
     customSubDomainName: accountName
     networkAcls: {

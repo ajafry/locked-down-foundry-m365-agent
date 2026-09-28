@@ -74,6 +74,7 @@ gateway, runner, and ingress design.
 | `azd` host | Operator's Azure CLI and GitHub CLI sessions | Provisioning, application deployment, repository-variable sync, runner deregistration, and teardown. |
 | Linux runner | VM managed identity | Foundry agent deployment, Azure control-plane changes, ACR access, governance, and evaluation. |
 | Foundry/project resources | Managed identities | Access to private state stores, Key Vault, model connections, and dependent services. |
+| Foundry CMK | Dedicated user-assigned managed identity | Key Vault Crypto User access established before the Foundry account enables customer-managed-key encryption. |
 | APIM | System-assigned managed identity | Keyless calls to the provider Foundry account and Azure control-plane discovery where configured. |
 | Teams publisher | VM managed identity plus a delegated user token | Managed identity for agent and Bot Service operations; delegated token only for the Microsoft 365 publish API. |
 

@@ -355,7 +355,8 @@ module stage11 'stages/11-api-center/11-api-center.bicep' = if (contains(apiCent
 // ==================== STAGE 13 — FOUNDRY ACCOUNT ====================
 // The centrepiece: the Foundry (AI Services) account + model, and EVERYTHING that stands it
 // up and protects it — its private endpoint + DNS, its Key Vault Crypto / App Insights RBAC,
-// and the CMK re-PUT of the account. Needs the Key Vault + DNS zones + data substrate (10).
+// and CMK encryption through a pre-authorized user-assigned identity. Needs the Key Vault +
+// DNS zones + data substrate (10).
 module stage13 'stages/13-foundry/13-foundry.bicep' = {
   name: 'stage13-foundry-${uniqueSuffix}'
   params: {

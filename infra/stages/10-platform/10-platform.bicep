@@ -133,8 +133,8 @@ module modelGateway 'model-gateway-platform.bicep' = {
 // ==================== Data-store CMK (STANDARD tier only) ====================
 // Grant the Storage + Search service identities the Key Vault Crypto Service Encryption
 // User role, THEN re-PUT the Storage account and AI Search service with customer-managed-key
-// encryption (the KV data-plane role must be effective first). The account CMK re-PUT lives in
-// stage 13.
+// encryption (the KV data-plane role must be effective first). Foundry account CMK setup lives
+// in stage 13 and uses a pre-authorized user-assigned identity.
 module keyVaultStorageSearchRoleAssignments 'rbac/keyvault-storage-search-role-assignment.bicep' = if (deployStandardAgent) {
   name: 'keyvault-storage-search-rbac-${uniqueSuffix}-deployment'
   params: {

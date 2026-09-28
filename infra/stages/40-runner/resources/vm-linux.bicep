@@ -35,7 +35,7 @@ param adminUsername string
 param adminPassword string
 
 @description('Size of the virtual machine. Small by default — this box only runs the runner + run-commands.')
-param vmSize string = 'Standard_D2s_v6'
+param vmSize string = 'Standard_D2s_v7'
 
 @description('Location for all resources.')
 param location string = resourceGroup().location
