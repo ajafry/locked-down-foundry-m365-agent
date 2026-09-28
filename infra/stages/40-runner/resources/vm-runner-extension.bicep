@@ -71,13 +71,15 @@ var configPreamble = join(
   '\n'
 )
 
+var bootstrapScript = replace(loadTextContent('bootstrap-github-runner.sh'), '\r\n', '\n')
+
 resource runnerRunCommand 'Microsoft.Compute/virtualMachines/runCommands@2024-07-01' = {
   parent: vm
   name: 'install-github-runner'
   location: location
   properties: {
     source: {
-      script: '${configPreamble}${loadTextContent('bootstrap-github-runner.sh')}'
+      script: '${configPreamble}${bootstrapScript}'
     }
     // Run synchronously and surface a non-zero script exit as a deployment failure,
     // so a broken runner install fails `azd provision` rather than passing silently.
