@@ -94,6 +94,7 @@ See [docs/configuration.md](docs/configuration.md) for examples and validation r
 
 ## Documentation
 
+- [End-to-end deployment instructions](Instructions.md)
 - [Architecture](docs/architecture.md)
 - [Operations](docs/operations.md)
 - [Configuration](docs/configuration.md)
